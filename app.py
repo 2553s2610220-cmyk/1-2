@@ -1,3 +1,3 @@
 import streamlit as st
-st.title('똥마렵다')
-st.write('더러운녀석')
+st.title('배틀그라운드 하고 싶다')
+st.write('뭘 꼬라봐')
