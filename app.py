@@ -1,68 +1,125 @@
 import streamlit as st
+from google import genai
 
 # 페이지 설정
 st.set_page_config(
-    page_title="친구관계 코칭 앱",
-    page_icon="🤝",
+    page_title="연애상담 챗봇",
+    page_icon="💕",
     layout="centered"
 )
 
-# 제목
-st.title("🤝 친구관계 코칭")
-st.write("친구 고민을 입력하면 간단한 조언을 해드립니다.")
+st.title("💕 연애상담 챗봇")
+st.caption("Gemini 2.5 Flash Lite 기반")
 
-# 고민 유형 선택
-category = st.selectbox(
-    "고민 유형 선택",
-    [
-        "친구와 거리감",
-        "싸움",
-        "무시당하는 느낌",
-        "새 친구 만들기",
-        "단체생활",
-        "배신감"
+# API 키 불러오기
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    client = genai.Client(api_key=api_key)
+except Exception:
+    st.error("API 키를 찾을 수 없습니다. Secrets 설정을 확인하세요.")
+    st.stop()
+
+# 채팅 기록 초기화
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {
+            "role": "assistant",
+            "content": (
+                "안녕하세요 😊\n\n"
+                "연애 고민, 썸, 이별, 재회, 고백 등 무엇이든 상담해 드릴게요."
+            )
+        }
     ]
-)
 
-# 고민 입력
-user_input = st.text_area(
-    "고민 내용을 입력하세요",
-    height=150,
-    placeholder="예: 친구가 요즘 저를 피하는 것 같아요..."
-)
+# 기존 메시지 출력
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
-# 코칭 함수
-def friend_coaching(category, text):
+# 사용자 입력
+user_input = st.chat_input("연애 고민을 입력하세요...")
 
-    if category == "친구와 거리감":
-        return "관계가 멀어졌다고 느껴질 때는 먼저 가볍게 안부를 건네보는 것이 좋습니다."
+if user_input:
 
-    elif category == "싸움":
-        return "누가 맞는지보다 서로의 감정을 이해하려는 태도가 중요합니다."
+    # 사용자 메시지 저장
+    st.session_state.messages.append(
+        {"role": "user", "content": user_input}
+    )
 
-    elif category == "무시당하는 느낌":
-        return "상대 행동만 해석하기보다 자신의 감정을 차분히 전달해보세요."
+    with st.chat_message("user"):
+        st.markdown(user_input)
 
-    elif category == "새 친구 만들기":
-        return "공통 관심사를 중심으로 자연스럽게 대화를 시작해보세요."
+    with st.chat_message("assistant"):
 
-    elif category == "단체생활":
-        return "모든 사람에게 맞추려 하기보다 편안한 관계 몇 개를 만드는 것이 중요합니다."
+        try:
+            with st.spinner("생각 중..."):
 
-    elif category == "배신감":
-        return "상처를 무시하지 말고, 관계를 계속 유지할 가치가 있는지 생각해보세요."
+                # 시스템 프롬프트
+                system_prompt = """
+                당신은 공감 능력이 뛰어난 연애 상담 전문가입니다.
 
-    return "조금 더 자세히 이야기해 주세요."
+                규칙:
+                - 친절하고 따뜻하게 답변한다.
+                - 사용자의 감정을 먼저 공감한다.
+                - 현실적이고 구체적인 조언을 제공한다.
+                - 단정적으로 판단하지 않는다.
+                - 답변은 한국어로 한다.
+                """
 
-# 버튼
-if st.button("코칭 받기 🤍"):
+                # 최근 대화 기록 구성
+                conversation = ""
 
-    if user_input.strip() == "":
-        st.warning("고민 내용을 입력해주세요.")
-    else:
-        answer = friend_coaching(category, user_input)
+                for msg in st.session_state.messages[-10:]:
+                    role = "사용자" if msg["role"] == "user" else "상담사"
+                    conversation += f"{role}: {msg['content']}\n"
 
-        st.success("코칭 결과")
-        st.write(answer)
+                prompt = f"""
+                {system_prompt}
 
-        st.info("💡 모든 관계에서 가장 중요한 것은 솔직한 대화와 자기 존중입니다.")
+                아래는 지금까지의 대화입니다.
+
+                {conversation}
+
+                상담사:
+                """
+
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash-lite",
+                    contents=prompt
+                )
+
+                answer = response.text
+
+                st.markdown(answer)
+
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": answer
+                    }
+                )
+
+        except Exception as e:
+            error_msg = f"오류가 발생했습니다.\n\n{str(e)}"
+
+            st.error(error_msg)
+
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": "죄송해요. 일시적인 오류가 발생했어요."
+                }
+            )
+
+# 사이드바
+with st.sidebar:
+    st.header("설정")
+
+    if st.button("대화 초기화"):
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": "안녕하세요 😊 연애 고민을 말씀해주세요."
+            }
+        ]
+        st.rerun()
